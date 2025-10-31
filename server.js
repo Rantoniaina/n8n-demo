@@ -9,6 +9,8 @@ app.use(express.json());
 
 // Status file path
 const STATUS_FILE = path.join(__dirname, 'status.json');
+// Error details file path
+const ERROR_FILE = path.join(__dirname, 'error.json');
 
 // Error descriptions with IT sections
 const ERROR_DESCRIPTIONS = [
@@ -92,6 +94,45 @@ const updateStatus = (newStatus, errorDetails = null) => {
     return updatedStatus;
 };
 
+// Save error details to JSON file
+const saveError = (errorDetails) => {
+    const errorData = {
+        id: errorDetails.id,
+        description: errorDetails.description,
+        severity: errorDetails.severity,
+        itSection: errorDetails.itSection,
+        resolution: errorDetails.resolution,
+        reportedAt: new Date().toISOString()
+    };
+    fs.writeFileSync(ERROR_FILE, JSON.stringify(errorData, null, 2));
+    return errorData;
+};
+
+// Read error details from JSON file
+const getError = () => {
+    try {
+        if (fs.existsSync(ERROR_FILE)) {
+            const data = fs.readFileSync(ERROR_FILE, 'utf8');
+            return JSON.parse(data);
+        }
+        return null;
+    } catch (error) {
+        console.error('Error reading error file:', error);
+        return null;
+    }
+};
+
+// Clear error file
+const clearError = () => {
+    try {
+        if (fs.existsSync(ERROR_FILE)) {
+            fs.unlinkSync(ERROR_FILE);
+        }
+    } catch (error) {
+        console.error('Error clearing error file:', error);
+    }
+};
+
 // Initialize status on startup
 initializeStatus();
 
@@ -116,10 +157,11 @@ app.get('/api/health', (req, res) => {
     res.status(httpStatus).json(response);
 });
 
-// Error endpoint - sets status to fail
-app.get('/api/error', (req, res) => {
+// POST Error endpoint - sets status to fail
+app.post('/api/error', (req, res) => {
     const randomError = getRandomError();
     const updatedStatus = updateStatus('fail', randomError);
+    const savedError = saveError(randomError);
 
     res.status(500).json({
         status: 'error',
@@ -128,20 +170,41 @@ app.get('/api/error', (req, res) => {
         errorCount: updatedStatus.errorCount,
         lastUpdated: updatedStatus.lastUpdated,
         timestamp: new Date().toISOString(),
-        errorDetails: {
-            id: randomError.id,
-            description: randomError.description,
-            severity: randomError.severity,
-            itSection: randomError.itSection,
-            resolution: randomError.resolution,
-            reportedAt: new Date().toISOString()
-        }
+        errorDetails: savedError
     });
+});
+
+// GET Error endpoint - returns the stored error
+app.get('/api/error', (req, res) => {
+    const currentStatus = getStatus();
+    const storedError = getError();
+
+    if (storedError) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Server is in error state',
+            systemStatus: currentStatus.status,
+            errorCount: currentStatus.errorCount,
+            lastUpdated: currentStatus.lastUpdated,
+            timestamp: new Date().toISOString(),
+            errorDetails: storedError
+        });
+    } else {
+        res.status(200).json({
+            status: 'ok',
+            message: 'No error has been reported yet',
+            systemStatus: currentStatus.status,
+            errorCount: currentStatus.errorCount,
+            lastUpdated: currentStatus.lastUpdated,
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 // Restart endpoint - resets status to ok
 app.post('/restart', (req, res) => {
     const updatedStatus = updateStatus('ok');
+    clearError();
 
     res.status(200).json({
         status: 'success',
@@ -160,7 +223,8 @@ app.get('/', (req, res) => {
         message: 'Simple Node.js Backend API with Enhanced Error Management',
         endpoints: {
             health: 'GET /api/health - Returns current system status (200 OK or 500 Error)',
-            error: 'GET /api/error - Sets system status to fail with random error details and returns 500',
+            errorGet: 'GET /api/error - Returns the stored error that was created via POST',
+            errorPost: 'POST /api/error - Sets system status to fail with random error details and returns 500',
             restart: 'POST /restart - Resets system status to ok and returns 200'
         },
         currentStatus: getStatus(),
@@ -174,11 +238,13 @@ app.get('/', (req, res) => {
 });
 
 // Start the server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server is also accessible via http://127.0.0.1:${PORT}`);
     console.log(`Available endpoints:`);
     console.log(`  GET /api/health - Returns current system status (200 OK or 500 Error)`);
-    console.log(`  GET /api/error - Sets system status to fail with random error details and returns 500`);
+    console.log(`  GET /api/error - Returns the stored error that was created via POST`);
+    console.log(`  POST /api/error - Sets system status to fail with random error details and returns 500`);
     console.log(`  POST /restart - Resets system status to ok and returns 200`);
     console.log(`Status file: ${STATUS_FILE}`);
     console.log(`Available error types: ${ERROR_DESCRIPTIONS.length}`);

@@ -1,12 +1,6 @@
 {
-  "status": "fail",
-  "lastUpdated": "2025-10-27T16:01:19.569Z",
-  "errorCount": 5,
-  "lastError": {
-    "id": "api_rate_limit",
-    "description": "API rate limit exceeded - Too many requests from external service",
-    "severity": "medium",
-    "itSection": "DevOps",
-    "resolution": "Implement rate limiting and contact external service provider"
-  }
+  "status": "ok",
+  "lastUpdated": "2025-10-31T21:20:29.581Z",
+  "errorCount": 10,
+  "lastError": null
 }
