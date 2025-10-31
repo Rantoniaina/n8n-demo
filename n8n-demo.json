@@ -1,0 +1,263 @@
+{
+    "name": "n8n demo",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "minutes",
+                            "minutesInterval": 1
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": [
+                -624,
+                96
+            ],
+            "id": "6db3af47-8dbb-4cbc-8ca9-1ece9345abd8",
+            "name": "Schedule Trigger"
+        },
+        {
+            "parameters": {
+                "url": "https://943a35f3094b.ngrok-free.app/api/health",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                -416,
+                96
+            ],
+            "id": "80ce9401-354b-4213-a241-74c04baa9978",
+            "name": "Get Server Health",
+            "alwaysOutputData": false,
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 2
+                    },
+                    "conditions": [
+                        {
+                            "id": "8062407f-1502-4c20-a897-8a599a5f2cd3",
+                            "leftValue": "={{ $json.error.status }}",
+                            "rightValue": 500,
+                            "operator": {
+                                "type": "number",
+                                "operation": "equals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                -208,
+                96
+            ],
+            "id": "27e6ad73-40dc-4f10-a589-0f548bcd90a4",
+            "name": "If Server has error"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Get the raw message string\nconst raw = $input.first().json.error.message\n\n// 1️⃣ Remove the status code prefix (e.g., \"500 -\" or \"message 500 -\")\nconst cleaned = raw.replace(/^(?:message\\s*)?\\d+\\s*-\\s*/, \"\").trim();\n\n// 2️⃣ Remove surrounding quotes if present\nconst unquoted = cleaned.startsWith('\"') && cleaned.endsWith('\"')\n  ? cleaned.slice(1, -1)\n  : cleaned;\n\n// 3️⃣ Unescape inner quotes and backslashes\nconst normalized = unquoted\n  .replace(/\\\\\"/g, '\"')\n  .replace(/\\\\\\\\/g, '\\\\');\n\n// 4️⃣ Parse into actual JSON\nlet parsed;\ntry {\n  parsed = JSON.parse(normalized);\n} catch (e) {\n  throw new Error(\"❌ Failed to parse message: \" + e.message + \"\\nRaw input:\\n\" + normalized);\n}\n\n// 5️⃣ Return parsed JSON object\nreturn [{ json: parsed }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                0,
+                0
+            ],
+            "id": "a31c70e1-4809-46f0-abfe-b7f0a89af560",
+            "name": "Parse Error Message"
+        },
+        {
+            "parameters": {
+                "authentication": "oAuth2",
+                "spaceId": "spaces/AAQA8_6xbTo",
+                "messageUi": {
+                    "text": "={{\n(() => {\n  const severity = $json.errorDetails?.severity?.toLowerCase() || '';\n  const emoji =\n    severity === 'low' ? '🟡' :\n    severity === 'high' ? '🟠' :\n    severity === 'critical' ? '🔴' :\n    '⚪️'; // default if unknown\n\n  return `${emoji} ${$json.errorDetails.description || ''}`;\n})()\n}}"
+                },
+                "additionalFields": {}
+            },
+            "type": "n8n-nodes-base.googleChat",
+            "typeVersion": 1,
+            "position": [
+                192,
+                -80
+            ],
+            "id": "c2655bb3-a500-493b-961c-ffdd49f3f8b3",
+            "name": "Create a message",
+            "webhookId": "9f6ce18e-16db-4640-9de8-eb9e8b1a0b7e",
+            "credentials": {
+                "googleChatOAuth2Api": {
+                    "id": "HprGHVmIDtzMNvMa",
+                    "name": "Chat account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "listId": "69051f0c48062d7bb8e9c49e",
+                "name": "={{\n(() => {\n  const error = $('Parse Error Message').item.json.errorDetails || {};\n  const severity = (error.severity || '').toLowerCase();\n  const emoji =\n    severity === 'low' ? '🟡' :\n    severity === 'high' ? '🟠' :\n    severity === 'critical' ? '🔴' :\n    '⚪️'; // default if unknown\n\n  return `${emoji} ${error.description || ''}`;\n})()\n}}",
+                "description": "={{ $json.response.toLowerCase().includes(\"sorry\") ? \"\" : $json.response }}",
+                "additionalFields": {}
+            },
+            "type": "n8n-nodes-base.trello",
+            "typeVersion": 1,
+            "position": [
+                416,
+                96
+            ],
+            "id": "47d9ba8f-71cd-4a11-8aa9-b892c677f3c8",
+            "name": "Create a card",
+            "credentials": {
+                "trelloApi": {
+                    "id": "cJj5Yvg3N3GHv6gu",
+                    "name": "Trello account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://54e33f34fd45.ngrok-free.app/api/generate",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"deepseek-coder:6.7b\",\n  \"prompt\": \"You're a senior {{ $json.errorDetails.itSection }}, this error occured: {{ $json.errorDetails.description }}. Give a detailed steps to fix it.\",\n\"stream\": false\n}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                192,
+                96
+            ],
+            "id": "3db2fce1-fbd7-45e1-8128-fc90ca156e6a",
+            "name": "HTTP Request",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://943a35f3094b.ngrok-free.app/restart",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                624,
+                96
+            ],
+            "id": "219fe5d0-cd99-4f8e-9767-ed6467ccbfd3",
+            "name": "Restart server"
+        }
+    ],
+    "pinData": {},
+    "connections": {
+        "Schedule Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Get Server Health",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Server Health": {
+            "main": [
+                [
+                    {
+                        "node": "If Server has error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "If Server has error": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Error Message",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Error Message": {
+            "main": [
+                [
+                    {
+                        "node": "Create a message",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "HTTP Request",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Create a card": {
+            "main": [
+                [
+                    {
+                        "node": "Restart server",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "HTTP Request": {
+            "main": [
+                [
+                    {
+                        "node": "Create a card",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": false,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "versionId": "f8813998-c209-443a-8240-9df41eb48c0a",
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "4e4e9d7a0c953eb11735e0c02f721aa7d7acd17570449b2b9a8a3aa073cf56d0"
+    },
+    "id": "9HowZdIzHdMWWv0s",
+    "tags": []
+}
