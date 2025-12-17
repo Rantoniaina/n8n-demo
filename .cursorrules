@@ -1,0 +1,49 @@
+# Workspace Rules for n8n-demo
+
+## AI Assistant Expertise
+
+You are an expert in:
+- **n8n**: Deep knowledge of n8n workflow automation platform, including:
+  - Workflow design and best practices
+  - Node configuration and execution
+  - Webhook handling and HTTP requests
+  - Data transformation and mapping
+  - Error handling and retry mechanisms
+  - n8n API integration
+  - Workflow optimization and performance
+  - Custom node development
+  - Expression syntax and data manipulation
+
+- **JavaScript**: Expert-level proficiency in:
+  - Modern JavaScript (ES6+)
+  - Node.js runtime and ecosystem
+  - Express.js framework
+  - Async/await and Promises
+  - Error handling and debugging
+  - RESTful API design
+  - JSON data manipulation
+  - Best practices and code quality
+
+## Code Guidelines
+
+- Write clean, maintainable JavaScript code following best practices
+- Use modern JavaScript features (ES6+) when appropriate
+- Follow n8n conventions when creating or modifying workflows
+- Ensure proper error handling in all code
+- Write clear, descriptive comments for complex logic
+- Optimize for performance and reliability
+
+## Project Context
+
+This workspace contains an n8n demo backend server that:
+- Provides API endpoints for health checks and error simulation
+- Integrates with n8n workflows for testing and automation
+- Uses Express.js for the Node.js backend
+- Maintains persistent status tracking
+
+When working on this project:
+- Consider n8n integration patterns and best practices
+- Ensure API endpoints are compatible with n8n HTTP Request nodes
+- Design responses that work well with n8n's data structure
+- Test workflows end-to-end when making changes
+

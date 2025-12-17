@@ -1,0 +1,166 @@
+{
+    "name": "React Technology Watch - Simple",
+    "nodes": [
+        {
+            "parameters": {},
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+                -48,
+                176
+            ],
+            "id": "d7f9aef9-a2cc-4c12-9491-9a9a2cf34fc6",
+            "name": "Manual Trigger"
+        },
+        {
+            "parameters": {
+                "url": "https://react.dev/rss.xml",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.rssFeedRead",
+            "typeVersion": 1.1,
+            "position": [
+                176,
+                176
+            ],
+            "id": "a1b5374c-2955-4438-84a9-8428cf487d7a",
+            "name": "Fetch React RSS",
+            "alwaysOutputData": false,
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Filter articles from the last 7 days (workflow runs every Monday)\n// RSS feed structure: { title, link, pubDate (RFC 2822 format), content }\nconst items = $input.all();\nconst now = new Date();\nconst sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);\n\nconst recentArticles = items.filter(item => {\n  const article = item.json;\n  // RSS feed uses 'pubDate' field in RFC 2822 format: \"Tue, 29 Mar 2022 00:00:00 GMT\"\n  const pubDateStr = article.pubDate || article.published || article.isoDate || '';\n  \n  if (!pubDateStr) {\n    // Skip articles without dates\n    return false;\n  }\n  \n  try {\n    // JavaScript Date constructor can parse RFC 2822 format\n    const pubDate = new Date(pubDateStr);\n    \n    // Check if date is valid\n    if (isNaN(pubDate.getTime())) {\n      return false; // Invalid date\n    }\n    \n    // Return true if article was published within the last 7 days\n    return pubDate >= sevenDaysAgo;\n  } catch (e) {\n    // If date parsing fails, exclude it to be safe\n    console.log('Date parsing failed for article:', article.title, 'Date:', pubDateStr);\n    return false;\n  }\n});\n\nreturn recentArticles;"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                400,
+                176
+            ],
+            "id": "681e6939-c346-43b6-b4da-b7ee902bf4df",
+            "name": "Filter Last 7 Days"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Prepare filtered articles for AI selection\n// RSS feed structure: { title, link, pubDate, content }\nconst items = $input.all();\nconst allArticles = items.map(item => {\n  const article = item.json;\n  \n  // Extract description from content (remove HTML tags)\n  let description = '';\n  if (article.content) {\n    // Remove HTML tags and get first 300 characters\n    description = article.content.replace(/<[^>]*>/g, '').substring(0, 300).trim();\n  } else if (article.contentSnippet) {\n    description = article.contentSnippet.substring(0, 300);\n  } else if (article.description) {\n    description = article.description.substring(0, 300);\n  }\n  \n  return {\n    title: article.title || 'Untitled',\n    url: article.link || article.url || '', // RSS uses 'link'\n    description: description,\n    published: article.pubDate || article.published || article.isoDate || '', // RSS uses 'pubDate'\n    fullData: article\n  };\n});\n\nreturn [{ json: { allArticles, totalCount: allArticles.length } }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                624,
+                176
+            ],
+            "id": "075fbe2d-fdaf-4677-9798-11f944518511",
+            "name": "Prepare Articles for AI"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Parse AI response and get top 5 articles\nconst aiResponse = $input.first().json;\nconst allArticlesData = $('Prepare Articles for AI').first().json;\nconst allArticles = allArticlesData.allArticles || [];\n\n// Extract JSON from AI response (Groq/OpenAI format)\nlet aiSelectedArticles = [];\ntry {\n  let content = '';\n  \n  // Handle Groq/OpenAI format: { choices: [{ message: { content: \"...\" } }] }\n  if (aiResponse.choices && aiResponse.choices[0] && aiResponse.choices[0].message) {\n    content = aiResponse.choices[0].message.content || '';\n  } else if (aiResponse.message) {\n    content = aiResponse.message.content || aiResponse.message || '';\n  }\n  \n  // Clean up content (remove markdown code blocks if present)\n  content = content.replace(/```json\\s*/g, '').replace(/```\\s*/g, '').trim();\n  \n  // Try to extract JSON from the response\n  const jsonMatch = content.match(/\\[\\s*\\{[\\s\\S]*\\}\\s*\\]/);\n  if (jsonMatch) {\n    aiSelectedArticles = JSON.parse(jsonMatch[0]);\n  } else {\n    // Try parsing the whole content\n    aiSelectedArticles = JSON.parse(content);\n  }\n} catch (e) {\n  // If AI fails, fallback to first 5 articles\n  console.log('AI parsing failed, using fallback:', e.message);\n  aiSelectedArticles = allArticles.slice(0, 5).map(a => ({\n    title: a.title,\n    url: a.url,\n    reason: 'Selected by fallback (AI unavailable)'\n  }));\n}\n\n// Merge AI selection with full article data\nconst top5Articles = aiSelectedArticles.map(aiArticle => {\n  // Find the full article data\n  const fullArticle = allArticles.find(a => \n    (a.url && aiArticle.url && a.url === aiArticle.url) ||\n    (a.title && aiArticle.title && a.title.toLowerCase() === aiArticle.title.toLowerCase())\n  ) || aiArticle;\n  \n  return {\n    ...fullArticle.fullData || fullArticle,\n    aiReason: aiArticle.reason || 'Selected by AI'\n  };\n});\n\nreturn [{ json: { articles: top5Articles, count: top5Articles.length } }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                832,
+                176
+            ],
+            "id": "8e0104bd-2271-4562-8adf-3c27f608dac8",
+            "name": "Parse AI Top 5"
+        },
+        {
+            "parameters": {
+                "fromEmail": "jaona.rantoniaina@gmail.com",
+                "toEmail": "jaona.rantoniaina@gmail.com",
+                "subject": "={{ 'AI-Selected React Top 5 Articles - ' + $now.toFormat('yyyy-MM-dd') }}",
+                "html": "={{ (() => { const data = $json || {}; const articles = data.articles || []; const reportDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); let html = '<html><head><style>body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; } h1 { color: #61dafb; } .article { background: #f5f5f5; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #61dafb; } .article-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; } .article-title a { color: #0066cc; text-decoration: none; } .article-title a:hover { text-decoration: underline; } .article-meta { color: #666; font-size: 14px; margin-bottom: 10px; } .article-description { color: #555; } .ai-reason { background: #e3f2fd; padding: 10px; border-radius: 5px; margin-top: 10px; font-style: italic; color: #1976d2; } </style></head><body><h1>🤖 AI-Selected React Top 5 Articles</h1><p><strong>Generated:</strong> ' + reportDate + '</p><p><strong>Selected by AI:</strong> ' + articles.length + ' articles</p>'; articles.forEach((article, index) => { const title = (article.title || 'Untitled').replace(/</g, '&lt;').replace(/>/g, '&gt;'); const url = article.link || article.url || '#'; const pubDate = article.pubDate || article.published || article.isoDate || ''; const description = (article.contentSnippet || article.description || '').substring(0, 200).replace(/</g, '&lt;').replace(/>/g, '&gt;'); const aiReason = (article.aiReason || '').replace(/</g, '&lt;').replace(/>/g, '&gt;'); html += '<div class=\"article\"><div class=\"article-title\"><a href=\"' + url + '\" target=\"_blank\">' + (index + 1) + '. ' + title + '</a></div>'; if (pubDate) { html += '<div class=\"article-meta\">Published: ' + pubDate + '</div>'; } if (description) { html += '<div class=\"article-description\">' + description + (description.length >= 200 ? '...' : '') + '</div>'; } if (aiReason) { html += '<div class=\"ai-reason\">🤖 <strong>Why selected:</strong> ' + aiReason + '</div>'; } html += '<div class=\"article-meta\"><a href=\"' + url + '\" target=\"_blank\">Read more →</a></div></div>'; }); html += '</body></html>'; return html; })() }}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.emailSend",
+            "typeVersion": 2.1,
+            "position": [
+                1040,
+                176
+            ],
+            "id": "50d10c7e-9ef6-4db6-82f3-d0109aba4029",
+            "name": "Send Email",
+            "alwaysOutputData": false,
+            "webhookId": "ea826ed0-9951-45a3-b659-3f24ef3fdeff",
+            "credentials": {
+                "smtp": {
+                    "id": "xc37Zeke81ULVqE6",
+                    "name": "SMTP account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        }
+    ],
+    "pinData": {},
+    "connections": {
+        "Manual Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch React RSS",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch React RSS": {
+            "main": [
+                [
+                    {
+                        "node": "Filter Last 7 Days",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Filter Last 7 Days": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare Articles for AI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse AI Top 5": {
+            "main": [
+                [
+                    {
+                        "node": "Send Email",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare Articles for AI": {
+            "main": [
+                [
+                    {
+                        "node": "Parse AI Top 5",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": false,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "versionId": "1b54a1c4-2932-4231-8be5-954f16894919",
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "b66095f289ebc38e78cfd92976bbe3b363b07c62bc7282603f642ddf069b88b0"
+    },
+    "id": "DmqNK1XlEdGWNMtO",
+    "tags": []
+}
